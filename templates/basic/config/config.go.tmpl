@@ -1,0 +1,104 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"encoding/json"
+
+	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
+)
+
+var cfg *Config
+
+type Config struct {
+	Mysql    MysqlConfig `mapstructure:"mysql" json:"mysql" yaml:"mysql"`
+	Redis    redisConfig `mapstructure:"redis" json:"redis" yaml:"redis"`
+	Extra    extra       `mapstructure:"extra" json:"extra" yaml:"extra"`
+	LogLevel string      `mapstructure:"log_level" json:"log_level" yaml:"log_level"`
+}
+
+type MysqlConfig struct {
+	Host     string `mapstructure:"host" json:"host" yaml:"host"`
+	User     string `mapstructure:"user" json:"user" yaml:"user"`
+	Password string `mapstructure:"password" json:"password" yaml:"password"`
+	DBName   string `mapstructure:"db_name" json:"db_name" yaml:"db_name"`
+	Port     string `mapstructure:"port" json:"port" yaml:"port"`
+	Prefix   string `mapstructure:"prefix" json:"prefix" yaml:"prefix"`
+	Charset  string `mapstructure:"charset" json:"charset" yaml:"charset"`
+}
+
+type redisConfig struct {
+	Host     string `mapstructure:"host" json:"host" yaml:"host"`
+	User     string `mapstructure:"user" json:"user" yaml:"user"`
+	Password string `mapstructure:"password" json:"password" yaml:"password"`
+	Port     string `mapstructure:"port" json:"port" yaml:"port"`
+	Db       int    `mapstructure:"db" json:"db" yaml:"db"`
+	Prefix   string `mapstructure:"prefix" json:"prefix" yaml:"prefix"`
+}
+
+type extra struct {
+	DingTalkURL string `mapstructure:"ding_talk_url" json:"ding_talk_url" yaml:"ding_talk_url"`
+	LoginExTime int64  `mapstructure:"login_ex_time" json:"login_ex_time" yaml:"login_ex_time"`
+}
+
+func ParseConfig(path string) error {
+	ext := strings.ToLower(filepath.Ext(path))
+	if ext == "" {
+		return fmt.Errorf("config file must have an extension (.json or .yaml)")
+	}
+
+	v := viper.New()
+	v.SetConfigFile(path)
+
+	if ext == ".yaml" || ext == ".yml" {
+		v.SetConfigType("yaml")
+	} else if ext == ".json" {
+		v.SetConfigType("json")
+	} else {
+		return fmt.Errorf("unsupported config file format: %s", ext)
+	}
+
+	if err := v.ReadInConfig(); err != nil {
+		return err
+	}
+
+	var c Config
+	if err := v.Unmarshal(&c); err != nil {
+		return err
+	}
+
+	cfg = &c
+	return nil
+}
+
+func GetConfig() *Config {
+	return cfg
+}
+
+func CreateConfigFile(path string) error {
+	conf := Config{}
+	var (
+		data []byte
+		err  error
+	)
+
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".json":
+		data, err = json.MarshalIndent(conf, "", "  ")
+	case ".yaml", ".yml":
+		data, err = yaml.Marshal(conf)
+	default:
+		return fmt.Errorf("unsupported config format: %s", ext)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(path, data, 0644)
+}

@@ -1,0 +1,180 @@
+// Code generated - DO NOT EDIT.
+// This file is a generated binding and any manual changes will be lost.
+
+package main
+
+import (
+	"fmt"
+	"reflect"
+	"strings"
+	"unicode"
+
+	"github.com/gin-gonic/gin"
+
+{{.MiddlewareImportPath}}
+{{.ControllersImportPath}}
+)
+
+const (
+	apiRootDirName    = "{{.ApiRootDirName}}"
+	controllerSuffix  = "Controller"
+	contextTypeName   = "Context"
+	defaultHTTPMethod = "POST"
+)
+
+var (
+	controllers  []interface{}
+	MethodTags   = map[string]string{
+{{.HTTPMethodTags}}
+	}
+	Middlewares = map[string][]gin.HandlerFunc{
+{{.MiddlewareTags}}
+	}
+)
+
+// RegisterController registers controller instance
+func RegisterController(controller interface{}) {
+	controllers = append(controllers, controller)
+}
+
+func init() {
+{{.RegisterControllers}}
+}
+
+// Register registers routes for all controllers
+func Register(router *gin.Engine) {
+	for _, controller := range controllers {
+		autoRegisterRoutes(router, controller)
+	}
+}
+
+// autoRegisterRoutes automatically registers routes for a single controller
+func autoRegisterRoutes(router *gin.Engine, controller interface{}) {
+	controllerType := reflect.TypeOf(controller)
+	controllerValue := reflect.ValueOf(controller)
+
+	baseRoute, pkgPath := buildBaseRoute(controllerType)
+
+	for i := 0; i < controllerType.NumMethod(); i++ {
+		method := controllerType.Method(i)
+		if !isValidControllerMethod(method) {
+			continue
+		}
+
+		registerMethodRoute(router, controllerValue, method, baseRoute, pkgPath)
+	}
+}
+
+// registerMethodRoute registers route for a single method
+func registerMethodRoute(router *gin.Engine, controllerValue reflect.Value,
+	method reflect.Method, baseRoute, pkgPath string) {
+
+	methodName := formatControllerMethodName(method.Name)
+	routePath := fmt.Sprintf("api/%s/%s", baseRoute, methodName)
+
+	methodKey := fmt.Sprintf("%s.%s.%s", pkgPath, controllerValue.Type().Name(), method.Name)
+	httpMethod := getHTTPMethod(methodKey)
+	handlers := buildHandlersChain(controllerValue, method, methodKey)
+
+	registerHTTPMethods(router, httpMethod, routePath, handlers)
+}
+
+// buildHandlersChain builds handler chain (middleware + controller method)
+func buildHandlersChain(controllerValue reflect.Value, method reflect.Method, key string) []gin.HandlerFunc {
+	baseHandlers := Middlewares[key]
+	if baseHandlers == nil {
+		baseHandlers = make([]gin.HandlerFunc, 0)
+	}
+	handler := createGinHandler(controllerValue, method)
+	return append(baseHandlers, handler)
+}
+
+// createGinHandler creates Gin handler function
+func createGinHandler(controllerValue reflect.Value, method reflect.Method) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		method.Func.Call([]reflect.Value{controllerValue, reflect.ValueOf(ctx)})
+	}
+}
+
+// registerHTTPMethods registers HTTP methods to router
+func registerHTTPMethods(router *gin.Engine, httpMethod string, path string, handlers []gin.HandlerFunc) {
+	switch httpMethod {
+	case "POST":
+		router.POST(path, handlers...)
+	case "GET":
+		router.GET(path, handlers...)
+	case "ALL": // Register both protocols
+		router.POST(path, handlers...)
+		router.GET(path, handlers...)
+	}
+}
+
+// buildBaseRoute builds base route path
+func buildBaseRoute(controllerType reflect.Type) (string, string) {
+	pkgPath := controllerType.PkgPath()
+	parts := strings.Split(pkgPath, "/")
+
+	var routeBuilder strings.Builder
+	foundAPIRoot := false
+
+	for _, part := range parts {
+		if part == "controller" {
+			break
+		}
+		if foundAPIRoot {
+			routeBuilder.WriteString(part + "/")
+		}
+		if part == apiRootDirName {
+			foundAPIRoot = true
+		}
+	}
+
+	controllerName := formatControllerName(controllerType.Name())
+	routeBuilder.WriteString(controllerName)
+
+	return routeBuilder.String(), pkgPath
+}
+
+// formatControllerName formats controller name
+func formatControllerName(name string) string {
+	return lowerFirst(strings.TrimSuffix(name, controllerSuffix))
+}
+
+// formatControllerMethodName formats method name
+func formatControllerMethodName(name string) string {
+	return lowerFirst(name)
+}
+
+// lowerFirst converts first letter to lowercase
+func lowerFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	runes := []rune(s)
+	runes[0] = unicode.ToLower(runes[0])
+	return string(runes)
+}
+
+// getHTTPMethod gets HTTP method type
+func getHTTPMethod(key string) string {
+	if method, exists := MethodTags[key]; exists {
+		return method
+	}
+	return defaultHTTPMethod
+}
+
+// getParamTypeName gets parameter type name
+func getParamTypeName(paramType reflect.Type) string {
+	if paramType.Kind() == reflect.Ptr {
+		return paramType.Elem().Name()
+	}
+	return paramType.Name()
+}
+
+// isValidControllerMethod validates if it's a valid controller method
+func isValidControllerMethod(method reflect.Method) bool {
+	if method.Type.NumIn() != 2 {
+		return false
+	}
+	return getParamTypeName(method.Type.In(1)) == contextTypeName
+}

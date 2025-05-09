@@ -1,0 +1,40 @@
+package main
+
+import (
+	"{{.ProjectName}}/lib/mylog"
+	"{{.ProjectName}}/config"
+	"flag"
+
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap/zapcore"
+)
+
+func main() {
+	var configPath string
+	var port string
+	flag.StringVar(&port, "port", "8080", "port")
+	flag.StringVar(&configPath, "config", "./config.yaml", "Config json file path")
+	flag.Parse()
+	err := config.ParseConfig(configPath)
+	if err != nil {
+		panic(err)
+	}
+
+	mylog.Init(mylog.Config{
+		Dir: "./logs",
+		EnabledLevels: map[zapcore.Level]bool{
+			zapcore.DebugLevel: false,
+			zapcore.InfoLevel:  true,
+			zapcore.WarnLevel:  false,
+			zapcore.ErrorLevel: true,
+			zapcore.FatalLevel: true,
+		},
+	})
+
+	router := gin.Default()
+	Register(router)
+	err = router.Run(":" + port)
+	if err != nil {
+		panic(err)
+	}
+}

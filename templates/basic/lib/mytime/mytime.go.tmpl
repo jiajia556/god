@@ -1,0 +1,86 @@
+package mytime
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"time"
+)
+
+const (
+	dateFormat     = "2006-01-02"
+	datetimeFormat = "2006-01-02 15:04:05"
+)
+
+// DateTime handles mixed types of date and datetime
+// Use isDate flag to distinguish between pure date type and datetime type
+type DateTime struct {
+	time.Time
+	isDate bool
+}
+
+func Now() DateTime {
+	return DateTime{Time: time.Now()}
+}
+
+func NewFromTime(t time.Time) DateTime {
+	return DateTime{Time: t}
+}
+
+// MarshalJSON implements JSON serialization interface
+func (dt DateTime) MarshalJSON() ([]byte, error) {
+	format := datetimeFormat
+	if dt.isDate {
+		format = dateFormat
+	}
+	return json.Marshal(dt.Format(format))
+}
+
+// UnmarshalJSON implements JSON deserialization interface
+func (dt *DateTime) UnmarshalJSON(data []byte) error {
+	data = bytes.Trim(data, `"`)
+	if len(data) == 0 || string(data) == "null" {
+		return nil
+	}
+
+	var (
+		value time.Time
+		err   error
+	)
+
+	switch len(data) {
+	case len(dateFormat):
+		value, err = time.ParseInLocation(dateFormat, string(data), time.Local)
+		dt.isDate = true
+	case len(datetimeFormat):
+		value, err = time.ParseInLocation(datetimeFormat, string(data), time.Local)
+	default:
+		return fmt.Errorf("invalid datetime format: %s", data)
+	}
+
+	if err != nil {
+		return fmt.Errorf("datetime parsing error: %w", err)
+	}
+
+	dt.Time = value
+	return nil
+}
+
+// String implements string formatting interface
+func (dt DateTime) String() string {
+	if dt.isDate {
+		return dt.Format(dateFormat)
+	}
+	return dt.Format(datetimeFormat)
+}
+
+// SetIsDate sets the date type flag
+func (dt *DateTime) SetIsDate(isDate bool) DateTime {
+	dt.isDate = isDate
+	return *dt
+}
+
+// IsDate determines if it is a pure date type
+func (dt DateTime) IsDate() bool {
+	return dt.isDate
+}

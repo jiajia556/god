@@ -1,0 +1,174 @@
+package mylog
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
+)
+
+var (
+	logger        *zap.Logger
+	isInitialized bool
+	initLock      sync.Mutex
+)
+
+// Config structure
+type Config struct {
+	Dir           string                 // Log directory
+	MaxSizeMB     int                    // Max size of single file in MB
+	MaxBackups    int                    // Max number of backup files
+	MaxAgeDays    int                    // Days to retain files
+	Compress      bool                   // Whether to compress old files
+	EnabledLevels map[zapcore.Level]bool // Level switches (true=enabled)
+}
+
+// Init initializes the logging system
+func Init(cfg Config) {
+	initLock.Lock()
+	defer initLock.Unlock()
+
+	if isInitialized {
+		return
+	}
+	if cfg.Dir == "" {
+		cfg.Dir = "./logs"
+	}
+	if err := os.MkdirAll(cfg.Dir, 0755); err != nil {
+		panic(fmt.Sprintf("Failed to create log directory: %v", err))
+	}
+
+	// Set default enabled log levels
+	if cfg.EnabledLevels == nil {
+		cfg.EnabledLevels = map[zapcore.Level]bool{
+			zapcore.DebugLevel: false,
+			zapcore.InfoLevel:  true,
+			zapcore.WarnLevel:  false,
+			zapcore.ErrorLevel: true,
+			zapcore.FatalLevel: true,
+		}
+	}
+
+	encoderConfig := zapcore.EncoderConfig{
+		TimeKey:       "time",
+		LevelKey:      "level",
+		NameKey:       "logger",
+		CallerKey:     "caller",
+		MessageKey:    "msg",
+		StacktraceKey: "stacktrace",
+		LineEnding:    zapcore.DefaultLineEnding,
+		EncodeLevel:   zapcore.CapitalLevelEncoder,
+		EncodeTime:    zapcore.TimeEncoderOfLayout("2006-01-02 15:04:05"),
+		EncodeCaller:  zapcore.ShortCallerEncoder,
+	}
+
+	newWriter := func(name string) zapcore.WriteSyncer {
+		return zapcore.AddSync(&lumberjack.Logger{
+			Filename:   filepath.Join(cfg.Dir, name),
+			MaxSize:    cfg.MaxSizeMB,
+			MaxBackups: cfg.MaxBackups,
+			MaxAge:     cfg.MaxAgeDays,
+			Compress:   cfg.Compress,
+		})
+	}
+
+	// Dynamically create cores
+	var cores []zapcore.Core
+
+	// Debug core (console + file)
+	if cfg.EnabledLevels[zapcore.DebugLevel] {
+		debugCore := zapcore.NewCore(
+			zapcore.NewConsoleEncoder(encoderConfig),
+			zapcore.NewMultiWriteSyncer(
+				newWriter("debug.log"),
+				zapcore.AddSync(os.Stdout), // Console output
+			),
+			zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+				return lvl == zapcore.DebugLevel
+			}),
+		)
+		cores = append(cores, debugCore)
+	}
+
+	// Info core
+	if cfg.EnabledLevels[zapcore.InfoLevel] {
+		infoCore := zapcore.NewCore(
+			zapcore.NewConsoleEncoder(encoderConfig),
+			newWriter("info.log"),
+			zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+				return lvl == zapcore.InfoLevel
+			}),
+		)
+		cores = append(cores, infoCore)
+	}
+
+	// Warn core
+	if cfg.EnabledLevels[zapcore.WarnLevel] {
+		warnCore := zapcore.NewCore(
+			zapcore.NewConsoleEncoder(encoderConfig),
+			newWriter("warn.log"),
+			zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+				return lvl == zapcore.WarnLevel
+			}),
+		)
+		cores = append(cores, warnCore)
+	}
+
+	// Error core (handles Error and Fatal)
+	errorEnabled := cfg.EnabledLevels[zapcore.ErrorLevel] || cfg.EnabledLevels[zapcore.FatalLevel]
+	if errorEnabled {
+		errorCore := zapcore.NewCore(
+			zapcore.NewConsoleEncoder(encoderConfig),
+			newWriter("error.log"),
+			zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+				return (lvl == zapcore.ErrorLevel && cfg.EnabledLevels[zapcore.ErrorLevel]) ||
+					(lvl == zapcore.FatalLevel && cfg.EnabledLevels[zapcore.FatalLevel])
+			}),
+		)
+		cores = append(cores, errorCore)
+	}
+
+	// Create logger
+	core := zapcore.NewTee(cores...)
+	logger = zap.New(core,
+		zap.AddCaller(),
+		zap.AddCallerSkip(1),
+	)
+	isInitialized = true
+}
+
+// Log function wrappers
+func Debug(msg string, fields ...zap.Field) {
+	if logger == nil {
+		Init(Config{})
+	}
+	logger.Debug(msg, fields...)
+}
+func Info(msg string, fields ...zap.Field) {
+	if logger == nil {
+		Init(Config{})
+	}
+	logger.Info(msg, fields...)
+}
+func Warn(msg string, fields ...zap.Field) {
+	if logger == nil {
+		Init(Config{})
+	}
+	logger.Warn(msg, fields...)
+}
+func Error(msg string, fields ...zap.Field) {
+	if logger == nil {
+		Init(Config{})
+	}
+	logger.Error(msg, fields...)
+}
+func Fatal(msg string, fields ...zap.Field) {
+	if logger == nil {
+		Init(Config{})
+	}
+	logger.Fatal(msg, fields...)
+}

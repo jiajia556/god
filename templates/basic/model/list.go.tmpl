@@ -1,0 +1,45 @@
+package {{.ModelPkg}}
+
+import (
+	"{{.ProjectName}}/lib/db/mysql"
+)
+
+type List struct {
+	*mysql.TxContext
+	Records []{{.ModelStructName}}
+	total   int64 // total number of records in the table that match the conditions, used for pagination
+}
+
+func NewList(ctx *mysql.TxContext) *List {
+	if ctx == nil {
+		ctx = mysql.NewTxContext()
+	}
+	l := &List{
+		ctx,
+		make([]{{.ModelStructName}}, 0),
+		0,
+	}
+
+	return l
+}
+
+func (l *List) FindAll() *List {
+	l.DB().Find(&l.Records)
+	return l
+}
+
+func (l *List) IsEmpty() bool {
+	return len(l.Records) == 0
+}
+
+func (l *List) Total() int64 {
+	return l.total
+}
+
+func (l *List) Foreach(fn func(key int, value *Record) (isBreak bool)) {
+	for i, v := range l.Records {
+		if fn(i, &Record{l.TxContext, v}) {
+			break
+		}
+	}
+}

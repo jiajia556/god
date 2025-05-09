@@ -1,0 +1,105 @@
+package output
+
+import (
+	"net/http"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+)
+
+// ErrorCode represents error code type
+type ErrorCode int
+
+// Output struct for building API response
+type Output struct {
+	c *gin.Context
+
+	code  ErrorCode
+	msg   string
+	data  interface{}
+	lang  string
+	other interface{}
+	total int64
+}
+
+// NewOutput creates a new Output instance
+func NewOutput(c *gin.Context, code ErrorCode, data interface{}) *Output {
+	lang := c.GetHeader("Language")
+	if lang == "" {
+		lang = "zh"
+	}
+
+	msg := ""
+	if msgs, ok := msgMap[code]; ok {
+		msg = msgs[lang]
+	}
+
+	return &Output{
+		c:     c,
+		code:  code,
+		data:  data,
+		lang:  lang,
+		msg:   msg,
+		total: -1,
+	}
+}
+
+// DiyMsg sets custom message
+func (out *Output) DiyMsg(msg string) *Output {
+	out.msg = msg
+	return out
+}
+
+// AppendMsg appends message
+func (out *Output) AppendMsg(msg string) *Output {
+	if out.msg == "" {
+		out.msg = msg
+	} else {
+		var builder strings.Builder
+		builder.WriteString(out.msg)
+		builder.WriteString(msg)
+		out.msg = builder.String()
+	}
+	return out
+}
+
+// Total sets total count of data
+func (out *Output) Total(total int64) *Output {
+	out.total = total
+	return out
+}
+
+// GetCode gets error code
+func (out *Output) GetCode() ErrorCode {
+	return out.code
+}
+
+// GetMsg gets message
+func (out *Output) GetMsg() string {
+	return out.msg
+}
+
+// GetData gets data
+func (out *Output) GetData() interface{} {
+	return out.data
+}
+
+// Out sends JSON response
+func (out *Output) Out() {
+	if out.data == nil {
+		if out.total == 0 {
+			out.data = make([]interface{}, 0)
+		} else {
+			out.data = gin.H{}
+		}
+	}
+	result := gin.H{
+		"code": out.code,
+		"msg":  out.msg,
+		"data": out.data,
+	}
+	if out.total >= 0 {
+		result["total"] = out.total
+	}
+	out.c.JSON(http.StatusOK, result)
+}

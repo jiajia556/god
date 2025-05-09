@@ -1,0 +1,5 @@
+package addapp
+
+func AddApp() {
+	
+}

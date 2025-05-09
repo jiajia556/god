@@ -1,0 +1,43 @@
+package {{.ModelPkg}}
+
+import (
+	"{{.ProjectName}}/lib/db/mysql"
+)
+
+{{.ModelStruct}}
+
+type Record struct {
+	*mysql.TxContext
+	Data {{.ModelStructName}}
+}
+
+func NewRecord(ctx *mysql.TxContext) *Record {
+	if ctx == nil {
+		ctx = mysql.NewTxContext()
+	}
+	r := &Record{
+		TxContext: ctx,
+		Data:      {{.ModelStructName}}{},
+	}
+	return r
+}
+
+func (r *Record) Exists() bool {
+	return r.Data.Id > 0
+}
+
+func (r *Record) Create() error {
+	return r.DB().Create(&r.Data).Error
+}
+
+func (r *Record) Update() error {
+	return r.DB().Save(&r.Data).Error
+}
+
+func (r *Record) Read(id uint64) error {
+	return r.DB().Take(&r.Data, id).Error
+}
+
+func (r *Record) Delete() error {
+	return r.DB().Delete(&r.Data).Error
+}
