@@ -100,11 +100,11 @@ var makeModelCmd = &cobra.Command{
 	Long:    "Generate Go model files from SQL schema definitions.\nCreates record and list type files based on SQL CREATE TABLE statements.",
 	Example: "  god mkmd --sql-path schema.sql\n  god mkmd -s ./database/schema.sql",
 	Run: func(cmd *cobra.Command, args []string) {
-		recordContent, err := templateFS.ReadFile("templates/basic/app/model/record.go.tmpl")
+		recordContent, err := templateFS.ReadFile("templates/basic/model/record.go.tmpl")
 		if err != nil {
 			service.OutputFatal(err)
 		}
-		listContent, err := templateFS.ReadFile("templates/basic/app/model/list.go.tmpl")
+		listContent, err := templateFS.ReadFile("templates/basic/model/list.go.tmpl")
 		if err != nil {
 			service.OutputFatal(err)
 		}
