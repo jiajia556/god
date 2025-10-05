@@ -34,8 +34,9 @@ func (r *Record) Update() error {
 	return r.DB().Save(&r.Data).Error
 }
 
-func (r *Record) Read(id uint64) error {
-	return r.DB().Take(&r.Data, id).Error
+func (r *Record) Read(id uint64) *Record {
+	r.DB().Take(&r.Data, id)
+	return r
 }
 
 func (r *Record) Delete() error {
