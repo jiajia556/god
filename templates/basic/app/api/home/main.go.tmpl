@@ -20,17 +20,6 @@ func main() {
 		panic(err)
 	}
 
-	mylog.Init(mylog.Config{
-		Dir: "./logs",
-		EnabledLevels: map[zapcore.Level]bool{
-			zapcore.DebugLevel: false,
-			zapcore.InfoLevel:  true,
-			zapcore.WarnLevel:  false,
-			zapcore.ErrorLevel: true,
-			zapcore.FatalLevel: true,
-		},
-	})
-
 	router := gin.Default()
 	Register(router)
 	err = router.Run(":" + port)

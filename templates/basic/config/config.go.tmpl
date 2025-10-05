@@ -41,8 +41,6 @@ type redisConfig struct {
 }
 
 type extra struct {
-	DingTalkURL string `mapstructure:"ding_talk_url" json:"ding_talk_url" yaml:"ding_talk_url"`
-	LoginExTime int64  `mapstructure:"login_ex_time" json:"login_ex_time" yaml:"login_ex_time"`
 }
 
 func ParseConfig(path string) error {
