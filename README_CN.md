@@ -1,119 +1,109 @@
 # God - Go 开发加速工具
 
-God (Go Development Accelerator Tool) 是一个命令行工具，旨在加速 Go Web 应用程序的开发。它提供了一系列命令来生成代码和搭建项目脚手架，使用 Go 构建 Web 应用程序变得更加简单和快速。
+一个用于加速 Go Web 应用程序开发的 CLI 工具，支持代码生成和项目脚手架。
 
 ## 安装
+
+安装 `god`，运行以下命令：
 
 ```bash
 go install github.com/jiajia556/god@latest
 ```
 
-或者克隆仓库并从源代码构建：
+## 命令
 
-```bash
-git clone https://github.com/jiajia556/god.git
-cd god
-go build -o god
-```
+### `god init [项目名称]`
 
-## 使用方法
+初始化一个新项目，包含指定名称和基本结构。
 
-### 初始化新项目
-
+**示例：**
 ```bash
 god init myproject
+god init example.com/myapp
 ```
 
-此命令创建一个具有基本结构和必要文件的新项目。
+### `god gen`
 
-### 添加控制器
+生成控制器、模型、中间件等 Go 代码。
 
+#### 子命令：
+
+1. **`god gen ctrl [控制器路由] [动作...]`**
+   - 创建一个新的控制器，可选添加动作。
+   
+   **示例：**
+   ```bash
+   god gen ctrl user
+   god gen ctrl product list create update
+   ```
+
+2. **`god gen act [控制器路由] [动作...]`**
+   - 向现有控制器添加动作。
+   
+   **示例：**
+   ```bash
+   god gen act user getInfo
+   god gen act product search filter
+   ```
+
+3. **`god gen mdw [中间件名称...]`**
+   - 创建新的中间件组件。
+   
+   **示例：**
+   ```bash
+   god gen mdw auth
+   god gen mdw logging cache
+   ```
+
+4. **`god gen model`**
+   - 从 SQL 模式定义生成数据库模型文件。
+   
+   **示例：**
+   ```bash
+   god gen model --sql-path schema.sql
+   god gen model -s ./database/schema.sql
+   ```
+
+### `god mkrt`
+
+基于现有控制器生成 API 路由配置。
+
+**示例：**
 ```bash
-god addc user/user
+god mkrt --root api
 ```
 
-此命令向项目添加一个路径为 "user/user" 的新控制器。
+### `god build [应用名称]`
 
-### 向控制器添加动作
+构建应用程序组件，支持可选版本控制。
 
+**示例：**
 ```bash
-god adda user/user login
+god build api user-service
+god build admin-console --version v1.2.0
+god build payment-service --app-root services --api-root api/v1
 ```
 
-此命令向 "user/user" 控制器添加一个名为 "login" 的新动作。
+## 标志
 
-### 添加中间件
+- **`--api-root` (`-a`)**
+  - API 根路径（例如 `api/v1`）。
 
-```bash
-god addm auth
-```
+- **`--sql-path` (`-s`)**
+  - 包含表定义的 SQL 文件路径。
 
-此命令向项目添加一个名为 "auth" 的新中间件。
+- **`--app-root` (`-r`)**
+  - 应用根路径（例如 `app`）。
 
-### 生成数据库模型文件
+- **`--version` (`-v`)**
+  - 应用版本（例如 `v1.0.0`）。
 
-```bash
-god mkmd --sql-path ./mydb.sql
-```
+- **`--goos` (`-o`)**
+  - GOOS（例如 `linux`）。
 
-此命令会提取mydb.sql文件中的建表语句，并为其创建对应的model
+- **`--goarch` (`-g`)**
+  - GOARCH（例如 `amd64`）。
 
-### 生成 API 路由配置
+## 许可证
 
-```bash
-god mkrt
-```
-
-此命令为您的 API 端点生成路由配置。
-
-### 构建应用程序
-
-```bash
-god build api home
-```
-
-此命令构建您的应用程序。
-
-## 项目结构
-
-当您使用 God 初始化新项目时，它会创建以下结构：
-
-```
-myproject/
-├── app/
-│   └── api/
-│       └── home/
-│           ├── main.go
-│           └── router.go
-├── bin/
-├── config/
-│   └── config.go
-├── lib/
-│   ├── db/
-│   │   └── mysql/
-│   │       └── mysql.go
-│   ├── middleware/
-│   ├── mylog/
-│   │   └── mylog.go
-│   ├── mytime/
-│   │   └── mytime.go
-│   └── output/
-│       ├── output.go
-│       └── outputmsg.go
-├── model/
-├── go.mod
-└── gopackage.json
-```
-
-## 特性
-
-- **自动路由注册**：根据控制器方法自动注册路由。
-- **中间件支持**：轻松将中间件集成到您的路由中。
-- **HTTP 方法注解**：使用注解为您的路由定义 HTTP 方法。
-- **统一输出格式**：API 响应的标准化输出格式。
-- **基于模板的代码生成**：从模板生成代码以确保一致性。
-
-
-## 贡献
-
-欢迎贡献！请随时提交 Pull Request。
+本项目采用 MIT 许可证。

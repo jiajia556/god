@@ -1,119 +1,109 @@
 # God - Go Development Accelerator Tool
 
-God (Go Development Accelerator Tool) is a command-line tool designed to accelerate Go web application development. It provides a set of commands to generate code and scaffold projects, making it easier and faster to build web applications with Go.
+A CLI tool to accelerate Go web application development with code generation and project scaffolding.
 
 ## Installation
+
+To install `god`, run the following command:
 
 ```bash
 go install github.com/jiajia556/god@latest
 ```
 
-Or clone the repository and build from source:
+## Commands
 
-```bash
-git clone https://github.com/jiajia556/god.git
-cd god
-go build -o god
-```
+### `god init [project-name]`
 
-## Usage
+Initialize a new project with the specified name and basic structure.
 
-### Initialize a new project
-
+**Example:**
 ```bash
 god init myproject
+god init example.com/myapp
 ```
 
-This command creates a new project with the basic structure and necessary files.
+### `god gen`
 
-### Add a controller
+Generate Go code for controllers, models, middleware, etc.
 
+#### Subcommands:
+
+1. **`god gen ctrl [controller-route] [actions...]`**
+   - Create a new controller with optional actions.
+   
+   **Example:**
+   ```bash
+   god gen ctrl user
+   god gen ctrl product list create update
+   ```
+
+2. **`god gen act [controller-route] [actions...]`**
+   - Add actions to an existing controller.
+   
+   **Example:**
+   ```bash
+   god gen act user getInfo
+   god gen act product search filter
+   ```
+
+3. **`god gen mdw [middleware-name...]`**
+   - Create new middleware components.
+   
+   **Example:**
+   ```bash
+   god gen mdw auth
+   god gen mdw logging cache
+   ```
+
+4. **`god gen model`**
+   - Generate database model files from SQL schema definitions.
+   
+   **Example:**
+   ```bash
+   god gen model --sql-path schema.sql
+   god gen model -s ./database/schema.sql
+   ```
+
+### `god mkrt`
+
+Generate API router configuration based on existing controllers.
+
+**Example:**
 ```bash
-god addc user/user
+god mkrt --root api
 ```
 
-This command adds a new controller with the path "user/user" to your project.
+### `god build [app-name]`
 
-### Add an action to a controller
+Build application components with optional versioning.
 
+**Example:**
 ```bash
-god adda user/user login
+god build api user-service
+god build admin-console --version v1.2.0
+god build payment-service --app-root services --api-root api/v1
 ```
 
-This command adds a new action named "login" to the "user/user" controller.
+## Flags
 
-### Add middleware
+- **`--api-root` (`-a`)**
+  - API root path (e.g., `api/v1`).
 
-```bash
-god addm auth
-```
+- **`--sql-path` (`-s`)**
+  - Path to SQL file containing table definitions.
 
-This command adds a new middleware named "auth" to your project.
+- **`--app-root` (`-r`)**
+  - App root path (e.g., `app`).
 
-### Generate database model files
+- **`--version` (`-v`)**
+  - App version (e.g., `v1.0.0`).
 
-```bash
-god mkmd --sql-path ./mydb.sql
-```
+- **`--goos` (`-o`)**
+  - GOOS (e.g., `linux`).
 
-This command extracts table creation statements from the mydb.sql file and creates corresponding models.
+- **`--goarch` (`-g`)**
+  - GOARCH (e.g., `amd64`).
 
-### Generate API router configuration
+## License
 
-```bash
-god mkrt
-```
-
-This command generates router configuration for your API endpoints.
-
-### Build the application
-
-```bash
-god build api home
-```
-
-This command builds your application.
-
-## Project Structure
-
-When you initialize a new project with God, it creates the following structure:
-
-```
-myproject/
-├── app/
-│   └── api/
-│       └── home/
-│           ├── main.go
-│           └── router.go
-├── bin/
-├── config/
-│   └── config.go
-├── lib/
-│   ├── db/
-│   │   └── mysql/
-│   │       └── mysql.go
-│   ├── middleware/
-│   ├── mylog/
-│   │   └── mylog.go
-│   ├── mytime/
-│   │   └── mytime.go
-│   └── output/
-│       ├── output.go
-│       └── outputmsg.go
-├── model/
-├── go.mod
-└── gopackage.json
-```
-
-## Features
-
-- **Automatic Route Registration**: Routes are automatically registered based on controller methods.
-- **Middleware Support**: Easy integration of middleware into your routes.
-- **HTTP Method Annotations**: Define HTTP methods for your routes using annotations.
-- **Unified Output Format**: Standardized output format for API responses.
-- **Template-Based Code Generation**: Generate code from templates to ensure consistency.
-
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+This project is licensed under the MIT License.
