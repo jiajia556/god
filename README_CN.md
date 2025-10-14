@@ -70,7 +70,8 @@ god init example.com/myapp
 
 **示例：**
 ```bash
-god mkrt --root api
+god mkrt
+god mkrt --root api/admin
 ```
 
 ### `god build [应用名称]`
