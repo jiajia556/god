@@ -4,8 +4,6 @@ package makerouter
 
 import (
 	"fmt"
-	"github.com/jiajia556/god/internal/service"
-	"github.com/jiajia556/god/internal/template"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -13,6 +11,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/jiajia556/god/internal/service"
+	"github.com/jiajia556/god/internal/template"
 )
 
 const (
@@ -199,6 +200,10 @@ func extractReceiverType(expr ast.Expr) string {
 }
 
 func (rg *routeGenerator) processMethodAnnotations(fnDecl *ast.FuncDecl, key string) {
+	if fnDecl.Doc == nil {
+		rg.httpMethods[key] = "POST"
+		return
+	}
 	for _, comment := range fnDecl.Doc.List {
 		text := strings.TrimSpace(strings.TrimPrefix(comment.Text, "//"))
 		switch {
