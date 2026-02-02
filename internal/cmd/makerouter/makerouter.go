@@ -32,6 +32,7 @@ type routeGenerator struct {
 	httpMethods       map[string]string // HTTP method mappings
 	middlewares       map[string]string // Middleware configurations
 	projectName       string            // Current project module name
+	projectRoot       string            // Current project root directory
 }
 
 // MakeRouter initiates the route generation process
@@ -52,6 +53,11 @@ func MakeRouter(routerTemplate string, rootPath string) {
 	var err error
 	if rg.projectName, err = service.GetProjectName(); err != nil {
 		service.OutputFatal("Failed to get project name:", err)
+	}
+
+	// Get project root (where gopackage.json or go.mod was discovered)
+	if rg.projectRoot, err = service.GetProjectRoot(); err != nil {
+		service.OutputFatal("Failed to get project root:", err)
 	}
 
 	tmplData, err := rg.generateTemplateData(rootPath)
@@ -118,7 +124,7 @@ func (rg *routeGenerator) analyzeControllerFile(filePath string) error {
 		return fmt.Errorf("file parsing failed: %w", err)
 	}
 
-	pkgPath := constructImportPath(rg.projectName, filePath)
+	pkgPath := constructImportPath(rg.projectName, rg.projectRoot, filePath)
 	alias, exists := rg.pkgAliases[pkgPath]
 
 	for _, decl := range node.Decls {
@@ -136,6 +142,12 @@ func (rg *routeGenerator) analyzeControllerFile(filePath string) error {
 			controllerName := typeSpec.Name.Name
 			if !exists {
 				alias = fmt.Sprintf("controller%d", len(rg.imports))
+				// ensure alias uniqueness in rare case
+				for _, a := range rg.imports {
+					if strings.Contains(a, "\""+pkgPath+"\"") && rg.pkgAliases[pkgPath] == alias {
+						alias = fmt.Sprintf("controller%d", len(rg.imports)+1)
+					}
+				}
 				rg.pkgAliases[pkgPath] = alias
 				rg.imports = append(rg.imports, fmt.Sprintf("\t%s \"%s\"", alias, pkgPath))
 			}
@@ -170,21 +182,50 @@ func (rg *routeGenerator) extractAnnotations(node *ast.File, typeName, pkgPrefix
 }
 
 // Helper functions below maintain the same logic with improved readability
-func constructImportPath(projectName, filePath string) string {
-	// Replace backslashes with forward slashes
-	filePath = strings.ReplaceAll(filePath, "\\", "/")
+func constructImportPath(projectName, projectRoot, filePath string) string {
+	// Normalize to absolute slash-separated paths
+	absFilePath, _ := filepath.Abs(filePath)
+	absFilePath = filepath.ToSlash(absFilePath)
 
-	// Concatenate MODULE and file path
-	updatedPath := projectName + "/" + filePath
+	absProjectRoot := projectRoot
+	if absProjectRoot == "" {
+		if p, err := filepath.Abs("."); err == nil {
+			absProjectRoot = p
+		} else {
+			absProjectRoot = ""
+		}
+	}
+	absProjectRoot = filepath.ToSlash(absProjectRoot)
 
-	// Find the last occurrence of "/"
-	lastSlashIndex := strings.LastIndex(updatedPath, "/")
-	if lastSlashIndex != -1 {
-		// Remove the last "/" and everything after it
-		updatedPath = updatedPath[:lastSlashIndex]
+	// Directory containing the file
+	dir := filepath.ToSlash(filepath.Dir(absFilePath))
+
+	// Compute relative path from project root to the file's directory
+	rel := dir
+	if absProjectRoot != "" {
+		if r, err := filepath.Rel(absProjectRoot, dir); err == nil {
+			rel = filepath.ToSlash(r)
+		} else {
+			// fallback: if Dir contains projectRoot as prefix, trim prefix
+			if strings.HasPrefix(dir, absProjectRoot+"/") {
+				rel = strings.TrimPrefix(dir, absProjectRoot+"/")
+			}
+		}
 	}
 
-	return updatedPath
+	// Clean and trim
+	rel = strings.Trim(rel, "/")
+
+	// If relative path is empty, import is module root
+	if rel == "" {
+		return projectName
+	}
+
+	// Make sure rel uses slashes and no leading/trailing slash
+	rel = strings.ReplaceAll(rel, "\\", "/")
+
+	// Compose module import path
+	return strings.TrimRight(projectName, "/") + "/" + rel
 }
 
 func extractReceiverType(expr ast.Expr) string {
