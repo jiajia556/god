@@ -108,16 +108,116 @@ func extractTableName(sql string) (string, error) {
 	return toCamelCase(matches[1]), nil
 }
 
+// 改进：基于括号层级与引号状态提取字段定义，避免被类型/注释/索引内的逗号误分割
 func extractFieldDefinitions(sql string) ([]string, error) {
-	re := regexp.MustCompile(`(?s)\((.*)\)`)
-	matches := re.FindStringSubmatch(sql)
-	if len(matches) < 2 {
+	// 找到第一个左括号（字段定义起点）
+	start := strings.Index(sql, "(")
+	if start < 0 {
 		return nil, fmt.Errorf("field definitions not found")
 	}
 
-	// Improved regex to fully capture field definitions
-	fieldRe := regexp.MustCompile("[\x60]?(\\w+)[\x60]?\\s+([^,]+)")
-	return fieldRe.FindAllString(matches[1], -1), nil
+	// 从 start 向后找到匹配的右括号（考虑嵌套）
+	level := 0
+	end := -1
+	for i := start; i < len(sql); i++ {
+		ch := sql[i]
+		if ch == '(' {
+			level++
+		} else if ch == ')' {
+			level--
+			if level == 0 {
+				end = i
+				break
+			}
+		}
+	}
+	if end == -1 || end <= start {
+		return nil, fmt.Errorf("field definitions not found (unmatched parentheses)")
+	}
+
+	inner := sql[start+1 : end]
+
+	// 按最外层逗号分割（忽略括号内和引号内的逗号）
+	defs := splitFieldDefinitions(inner)
+
+	// 清理并返回
+	out := make([]string, 0, len(defs))
+	for _, d := range defs {
+		s := strings.TrimSpace(d)
+		if s != "" {
+			out = append(out, s)
+		}
+	}
+	return out, nil
+}
+
+// splitFieldDefinitions: 在没有正则限制下按最外层逗号切分定义
+// 新增：考虑单/双引号以及反斜杠转义，避免在引号内分割
+func splitFieldDefinitions(body string) []string {
+	var defs []string
+	var cur strings.Builder
+	level := 0
+	inSingle := false
+	inDouble := false
+	escaped := false
+
+	for i := 0; i < len(body); i++ {
+		ch := body[i]
+
+		// 处理转义：如果前一个字符是反斜杠，则当前字符是被转义的
+		if ch == '\\' && !escaped {
+			escaped = true
+			cur.WriteByte(ch)
+			continue
+		}
+
+		// 如果在单引号或双引号内，被转义字符不作为引号结束
+		if !escaped {
+			if ch == '\'' && !inDouble {
+				inSingle = !inSingle
+				cur.WriteByte(ch)
+				continue
+			}
+			if ch == '"' && !inSingle {
+				inDouble = !inDouble
+				cur.WriteByte(ch)
+				continue
+			}
+		}
+
+		// 非引号中且非转义，处理括号层级
+		if !inSingle && !inDouble {
+			if ch == '(' {
+				level++
+			} else if ch == ')' {
+				if level > 0 {
+					level--
+				}
+			}
+		}
+
+		// 分割条件：最外层逗号（level==0）且不在任意引号内
+		if ch == ',' && level == 0 && !inSingle && !inDouble {
+			part := strings.TrimSpace(cur.String())
+			if part != "" {
+				defs = append(defs, part)
+			}
+			cur.Reset()
+			escaped = false
+			continue
+		}
+
+		// 正常写入当前字符
+		cur.WriteByte(ch)
+		// 重置 escaped 标志（只有紧接着的字符被转义）
+		escaped = false
+	}
+
+	// 追加剩余
+	if s := strings.TrimSpace(cur.String()); s != "" {
+		defs = append(defs, s)
+	}
+	return defs
 }
 
 func parseField(def string) (fieldInfo, error) {
@@ -129,18 +229,47 @@ func parseField(def string) (fieldInfo, error) {
 	}
 
 	fieldName := matches[1]
-	if []byte(fieldName)[0] < 'a' || []byte(fieldName)[0] > 'z' {
+	// 仅对以小写字母开头的 Column 名进行生成��保持旧逻辑）
+	if len(fieldName) == 0 || []byte(fieldName)[0] < 'a' || []byte(fieldName)[0] > 'z' {
 		return fieldInfo{}, nil
 	}
 	typeInfo := strings.ToLower(strings.TrimSpace(matches[2]))
 
+	// 保留原有类型映射
 	goType, tags := mapTypeAndTags(typeInfo)
-	//isNullable := strings.Contains(typeInfo, "null")
 
-	// Handle pointer types
-	//if isNullable && !isSpecialType(goType) {
-	//	goType = "*" + goType
-	//}
+	// 保守增强：识别常见约束并加入 tags（不改变 goType 的映射）
+	if strings.Contains(typeInfo, "unsigned") {
+		tags["unsigned"] = "true"
+	}
+	if strings.Contains(typeInfo, "auto_increment") || strings.Contains(typeInfo, "autoincrement") {
+		tags["autoIncrement"] = "true"
+	}
+	if strings.Contains(typeInfo, "primary key") || strings.Contains(typeInfo, "primary_key") {
+		tags["primaryKey"] = "true"
+	}
+	if strings.Contains(typeInfo, "not null") {
+		tags["notNull"] = "true"
+	}
+	// default 值提取（尽量简单提取）
+	if idx := strings.Index(strings.ToUpper(typeInfo), "DEFAULT "); idx >= 0 {
+		after := strings.TrimSpace(typeInfo[idx+8:])
+		if after != "" {
+			if strings.HasPrefix(after, "'") || strings.HasPrefix(after, "\"") {
+				q := after[0]
+				if j := strings.IndexByte(after[1:], q); j >= 0 {
+					tags["default"] = after[1 : 1+j]
+				} else {
+					tags["default"] = strings.Trim(after, "'\"")
+				}
+			} else {
+				parts := strings.Fields(after)
+				if len(parts) > 0 {
+					tags["default"] = strings.TrimRight(parts[0], ",")
+				}
+			}
+		}
+	}
 
 	return fieldInfo{
 		name:     toCamelCase(fieldName),
@@ -181,14 +310,6 @@ func mapTypeAndTags(sqlType string) (string, map[string]string) {
 	default:
 		goType = "string"
 	}
-
-	// Handle special tags
-	//if strings.Contains(sqlType, "auto_increment") {
-	//	tags["autoIncrement"] = "true"
-	//}
-	//if strings.Contains(sqlType, "primary key") {
-	//	tags["primaryKey"] = "true"
-	//}
 
 	return goType, tags
 }
